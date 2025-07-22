@@ -78,6 +78,8 @@ jobs:
           AppVersion=$versionClean
           AppPublisher=Your Company Name
           AppPublisherURL=https://github.com/${{ github.repository }}
+          AppSupportURL=https://github.com/${{ github.repository }}/issues
+          AppUpdatesURL=https://github.com/${{ github.repository }}/releases
           DefaultDirName={autopf}\SwissKit
           DefaultGroupName=SwissKit
           UninstallDisplayName=SwissKit
@@ -86,30 +88,97 @@ jobs:
           OutputDir=installer
           OutputBaseFilename=SwissKit-Setup-$versionClean
           WizardStyle=modern
-          PrivilegesRequired=lowest
+          ; 权限设置：允许用户选择安装路径
+          PrivilegesRequired=admin
+          PrivilegesRequiredOverridesAllowed=commandline dialog
           ArchitecturesAllowed=x64compatible
           ArchitecturesInstallIn64BitMode=x64compatible
+          ; 允许用户选择安装目录
+          DisableDirPage=no
+          DisableProgramGroupPage=no
+          ; 设置最小空间需求（100MB，根据实际需要调整）
+          ExtraDiskSpaceRequired=104857600
+          ; 允许用户取消安装
+          AllowCancelDuringInstall=yes
+          ; 升级支持：使用唯一的 AppId 来识别已安装的版本
+          AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+          ; 版本信息文件
+          VersionInfoVersion=$versionClean
+          VersionInfoDescription=SwissKit Application
+          ; 设置卸载键
+          UninstallDisplayIcon={app}\SwissKit.exe
+          ; 升级时的行为
+          SetupMutex=SwissKitSetupMutex
+          AppMutex=SwissKitAppMutex
           
           [Languages]
           Name: "english"; MessagesFile: "compiler:Default.isl"
           
           [Tasks]
-          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
-          Name: "startmenu"; Description: "Create a start menu shortcut"; GroupDescription: "Additional shortcuts:"; Flags: checkedonce
+          Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+          Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsAdminInstallMode
           
           [Files]
           Source: "build\windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
           
           [Icons]
           Name: "{group}\SwissKit"; Filename: "{app}\SwissKit.exe"
+          Name: "{group}\{cm:UninstallProgram,SwissKit}"; Filename: "{uninstallexe}"
           Name: "{autodesktop}\SwissKit"; Filename: "{app}\SwissKit.exe"; Tasks: desktopicon
-          Name: "{userstartmenu}\SwissKit"; Filename: "{app}\SwissKit.exe"; Tasks: startmenu
+          Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\SwissKit"; Filename: "{app}\SwissKit.exe"; Tasks: quicklaunchicon
           
           [Run]
-          Filename: "{app}\SwissKit.exe"; Description: "Launch SwissKit"; Flags: nowait postinstall skipifsilent
+          Filename: "{app}\SwissKit.exe"; Description: "{cm:LaunchProgram,SwissKit}"; Flags: nowait postinstall skipifsilent
           
           [UninstallDelete]
           Type: filesandordirs; Name: "{app}"
+          
+          [Code]
+          function ShouldSkipPage(PageID: Integer): Boolean;
+          begin
+            Result := False;
+            // 升级时跳过某些页面
+            if IsUpgrade() then
+            begin
+              case PageID of
+                wpSelectDir: Result := True;  // 升级时跳过目录选择
+                wpSelectProgramGroup: Result := True;  // 升级时跳过程序组选择
+              end;
+            end;
+          end;
+          
+          function IsUpgrade(): Boolean;
+          var
+            PrevVersion: String;
+          begin
+            PrevVersion := GetPreviousData('Version', '');
+            Result := (PrevVersion <> '');
+          end;
+          
+          function InitializeSetup(): Boolean;
+          var
+            PrevVersion: String;
+            CurVersion: String;
+          begin
+            Result := True;
+            PrevVersion := GetPreviousData('Version', '');
+            CurVersion := '$versionClean';
+            
+            if PrevVersion <> '' then
+            begin
+              if MsgBox('SwissKit version ' + PrevVersion + ' is already installed. ' +
+                        'Do you want to upgrade to version ' + CurVersion + '?', 
+                        mbConfirmation, MB_YESNO) = IDNO then
+              begin
+                Result := False;
+              end;
+            end;
+          end;
+          
+          procedure RegisterPreviousData(PreviousDataKey: Integer);
+          begin
+            SetPreviousData(PreviousDataKey, 'Version', '$versionClean');
+          end;
           "@
           
           New-Item -ItemType Directory -Path "installer" -Force
@@ -186,8 +255,17 @@ jobs:
             **Installer Version:**
             1. Download the `.exe` installer file
             2. Double-click to run the installer
-            3. Follow the setup wizard
-            4. Launch from desktop or start menu
+            3. Follow the setup wizard:
+               - For new installation: Choose installation directory
+               - For upgrade: Previous settings will be preserved
+            4. Select additional options (desktop shortcut, etc.)
+            5. Launch from desktop or start menu
+            
+            **Upgrade Instructions:**
+            - Simply run the new installer
+            - It will detect existing installation
+            - Your settings and data will be preserved
+            - The old version will be automatically replaced
             
             **Portable Version:**
             1. Download and extract the ZIP file
