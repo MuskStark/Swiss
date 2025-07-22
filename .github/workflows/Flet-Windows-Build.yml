@@ -1,4 +1,4 @@
-name: Flet Windows Build with Installer
+name: Flet Multi-Platform Build
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       test_version:
-        description: '测试版本号'
+        description: 'Test version number'
         required: true
         default: 'v0.1.0-test'
 
@@ -54,13 +54,11 @@ jobs:
           uv run flet build windows --build-version $VERSION
         shell: powershell
 
-      # 新增：安装 Inno Setup
       - name: Install Inno Setup
         run: |
           choco install innosetup -y
         shell: powershell
 
-      # 新增：创建 Inno Setup 脚本
       - name: Create Inno Setup script
         shell: powershell
         run: |
@@ -88,26 +86,18 @@ jobs:
           OutputDir=installer
           OutputBaseFilename=SwissKit-Setup-$versionClean
           WizardStyle=modern
-          ; 权限设置：允许用户选择安装路径
           PrivilegesRequired=admin
           PrivilegesRequiredOverridesAllowed=commandline dialog
           ArchitecturesAllowed=x64compatible
           ArchitecturesInstallIn64BitMode=x64compatible
-          ; 允许用户选择安装目录
           DisableDirPage=no
           DisableProgramGroupPage=no
-          ; 设置最小空间需求（100MB，根据实际需要调整）
           ExtraDiskSpaceRequired=104857600
-          ; 允许用户取消安装
           AllowCancelDuringInstall=yes
-          ; 升级支持：使用唯一的 AppId 来识别已安装的版本
           AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
-          ; 版本信息文件
           VersionInfoVersion=$versionClean
           VersionInfoDescription=SwissKit Application
-          ; 设置卸载键
           UninstallDisplayIcon={app}\SwissKit.exe
-          ; 升级时的行为
           SetupMutex=SwissKitSetupMutex
           AppMutex=SwissKitAppMutex
           
@@ -145,12 +135,11 @@ jobs:
           function ShouldSkipPage(PageID: Integer): Boolean;
           begin
             Result := False;
-            // 升级时跳过某些页面
             if IsUpgrade() then
             begin
               case PageID of
-                wpSelectDir: Result := True;  // 升级时跳过目录选择
-                wpSelectProgramGroup: Result := True;  // 升级时跳过程序组选择
+                wpSelectDir: Result := True;
+                wpSelectProgramGroup: Result := True;
               end;
             end;
           end;
@@ -184,13 +173,11 @@ jobs:
           New-Item -ItemType Directory -Path "installer" -Force
           $innoScript | Out-File -FilePath "swisskit.iss" -Encoding UTF8
 
-      # 新增：构建安装包
       - name: Build installer
         run: |
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "swisskit.iss"
         shell: powershell
 
-      # 修改：同时打包ZIP和安装包
       - name: Package builds
         shell: powershell
         run: |
@@ -202,7 +189,7 @@ jobs:
           
           $artifactName = "swisskit-windows-x64-$version"
           
-          # 创建ZIP包
+          # Create ZIP package
           New-Item -ItemType Directory -Path "release\$artifactName" -Force
           Copy-Item -Path "build\windows\*" -Destination "release\$artifactName" -Recurse
           Compress-Archive -Path "release\$artifactName" -DestinationPath "build\$artifactName.zip"
@@ -215,17 +202,208 @@ jobs:
             build/*.zip
             installer/*.exe
 
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev libblkid-dev liblzma-dev
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install Python dependencies
+        run: |
+          uv sync
+          uv add flet
+
+      - name: Build with flet
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.test_version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          
+          export PYTHONIOENCODING="utf-8"
+          export PYTHONUTF8="1"
+          
+          uv run flet build linux --build-version $VERSION
+
+      - name: Package builds
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.test_version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          
+          ARTIFACT_NAME="swisskit-linux-x64-$VERSION"
+          
+          # Create tarball
+          mkdir -p release
+          cd build/linux
+          tar -czf "../../release/$ARTIFACT_NAME.tar.gz" *
+          cd ../..
+
+      - name: Create AppImage
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.test_version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          
+          VERSION_CLEAN=${VERSION#v}
+          
+          # Download AppImage tools
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # Copy application files
+          cp -r build/linux/* AppDir/usr/bin/
+          
+          # Create desktop file
+          cat > AppDir/usr/share/applications/swisskit.desktop << EOF
+          [Desktop Entry]
+          Name=SwissKit
+          Exec=SwissKit
+          Icon=swisskit
+          Type=Application
+          Categories=Utility;
+          Comment=SwissKit Application
+          EOF
+          
+          # Create AppRun script
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}/usr/bin/:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib/:${HERE}/usr/lib/x86_64-linux-gnu/:${LD_LIBRARY_PATH}"
+          cd "${HERE}/usr/bin"
+          exec "${HERE}/usr/bin/SwissKit" "$@"
+          EOF
+          
+          chmod +x AppDir/AppRun
+          chmod +x AppDir/usr/bin/SwissKit
+          
+          # Copy icon (assuming you have one, otherwise create a placeholder)
+          # If you don't have an icon, uncomment the following lines to create a placeholder
+          # convert -size 256x256 xc:blue -fill white -draw "circle 128,128 128,64" AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png
+          # Or copy your existing icon:
+          # cp assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png
+          
+          # Build AppImage
+          ./appimagetool-x86_64.AppImage AppDir "release/SwissKit-$VERSION_CLEAN-x86_64.AppImage"
+
+      - name: Create DEB package
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.test_version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          
+          VERSION_CLEAN=${VERSION#v}
+          
+          # Create debian package structure
+          mkdir -p deb/DEBIAN
+          mkdir -p deb/usr/bin
+          mkdir -p deb/usr/share/applications
+          mkdir -p deb/usr/share/doc/swisskit
+          
+          # Copy application files
+          cp -r build/linux/* deb/usr/bin/
+          chmod +x deb/usr/bin/SwissKit
+          
+          # Create control file
+          cat > deb/DEBIAN/control << EOF
+          Package: swisskit
+          Version: $VERSION_CLEAN
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Your Name <your.email@example.com>
+          Description: SwissKit Application
+           A multi-tool application built with Flet
+          EOF
+          
+          # Create desktop file
+          cat > deb/usr/share/applications/swisskit.desktop << EOF
+          [Desktop Entry]
+          Name=SwissKit
+          Exec=/usr/bin/SwissKit
+          Icon=swisskit
+          Type=Application
+          Categories=Utility;
+          Comment=SwissKit Application
+          EOF
+          
+          # Create copyright file
+          cat > deb/usr/share/doc/swisskit/copyright << EOF
+          Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+          Upstream-Name: SwissKit
+          Source: https://github.com/${{ github.repository }}
+          
+          Files: *
+          Copyright: 2024 Your Name
+          License: MIT
+          EOF
+          
+          # Build DEB package
+          dpkg-deb --build deb
+          mv deb.deb "release/swisskit_${VERSION_CLEAN}_amd64.deb"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: |
+            release/*.tar.gz
+            release/*.AppImage
+            release/*.deb
+
   release:
-    needs: build-windows
+    needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download artifact
+      - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
           name: windows-build
-          path: artifacts/
+          path: artifacts/windows/
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-build
+          path: artifacts/linux/
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -235,43 +413,71 @@ jobs:
           files: |
             artifacts/**/*
           body: |
-            ## Windows Version Downloads
+            ## Download Instructions
             
-            ### 🚀 Recommended (Installer)
+            ### 🪟 Windows
+            
+            #### Recommended (Installer)
             - **SwissKit-Setup-[version].exe** - Windows Installer
               - Automatically installs to system
               - Creates desktop and start menu shortcuts
               - Supports one-click uninstall
               - Best for regular use
             
-            ### 📦 Portable Version (ZIP)
+            #### Portable Version (ZIP)
             - **swisskit-windows-x64-[version].zip** - Portable version
               - Extract and run
               - No system modifications
               - Best for testing or temporary use
             
+            ### 🐧 Linux
+            
+            #### AppImage (Recommended for most distributions)
+            - **SwissKit-[version]-x86_64.AppImage** - Universal Linux package
+              - Works on most Linux distributions
+              - No installation required
+              - Just download, make executable, and run
+            
+            #### DEB Package (For Debian/Ubuntu)
+            - **swisskit_[version]_amd64.deb** - Debian package
+              - For Debian, Ubuntu, and derivatives
+              - Installs with system package manager
+              - Integrates with desktop environment
+            
+            #### Tarball (Manual installation)
+            - **swisskit-linux-x64-[version].tar.gz** - Compressed archive
+              - Extract to any location
+              - For advanced users or custom setups
+            
             ### Installation Instructions
             
-            **Installer Version:**
+            #### Windows Installer:
             1. Download the `.exe` installer file
             2. Double-click to run the installer
-            3. Follow the setup wizard:
-               - For new installation: Choose installation directory
-               - For upgrade: Previous settings will be preserved
-            4. Select additional options (desktop shortcut, etc.)
-            5. Launch from desktop or start menu
+            3. Follow the setup wizard
+            4. Launch from desktop or start menu
             
-            **Upgrade Instructions:**
-            - Simply run the new installer
-            - It will detect existing installation
-            - Your settings and data will be preserved
-            - The old version will be automatically replaced
+            #### Linux AppImage:
+            ```bash
+            chmod +x SwissKit-*.AppImage
+            ./SwissKit-*.AppImage
+            ```
             
-            **Portable Version:**
-            1. Download and extract the ZIP file
-            2. Run `SwissKit.exe` from the extracted folder
-            3. If you see a security warning, click "More info" → "Run anyway"
+            #### Linux DEB Package:
+            ```bash
+            sudo dpkg -i swisskit_*.deb
+            # Or double-click in file manager
+            ```
             
-            > **System Requirements:** Windows 10/11 (x64)
+            #### Linux Tarball:
+            ```bash
+            tar -xzf swisskit-linux-x64-*.tar.gz
+            cd swisskit-linux-x64-*/
+            ./SwissKit
+            ```
+            
+            ### System Requirements
+            - **Windows**: Windows 10/11 (x64)
+            - **Linux**: Ubuntu 20.04+ or equivalent (x64)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
