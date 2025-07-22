@@ -76,7 +76,7 @@ jobs:
           [Setup]
           AppName=SwissKit
           AppVersion=$versionClean
-          AppPublisher=Your Company Name
+          AppPublisher=Summer Group
           AppPublisherURL=https://github.com/${{ github.repository }}
           DefaultDirName={autopf}\SwissKit
           DefaultGroupName=SwissKit
