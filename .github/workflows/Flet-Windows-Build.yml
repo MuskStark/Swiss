@@ -134,6 +134,14 @@ jobs:
           Type: filesandordirs; Name: "{app}"
           
           [Code]
+          function IsUpgrade(): Boolean;
+          var
+            PrevVersion: String;
+          begin
+            PrevVersion := GetPreviousData('Version', '');
+            Result := (PrevVersion <> '');
+          end;
+          
           function ShouldSkipPage(PageID: Integer): Boolean;
           begin
             Result := False;
@@ -145,14 +153,6 @@ jobs:
                 wpSelectProgramGroup: Result := True;  // 升级时跳过程序组选择
               end;
             end;
-          end;
-          
-          function IsUpgrade(): Boolean;
-          var
-            PrevVersion: String;
-          begin
-            PrevVersion := GetPreviousData('Version', '');
-            Result := (PrevVersion <> '');
           end;
           
           function InitializeSetup(): Boolean;
