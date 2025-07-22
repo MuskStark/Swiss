@@ -398,87 +398,87 @@ jobs:
             echo "Warning: AppImage creation failed, but other formats are available"
           fi
 
-      - name: Create DEB package
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.test_version }}"
-          else
-            VERSION="${{ github.ref_name }}"
-          fi
+      # - name: Create DEB package
+      #   run: |
+      #     if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+      #       VERSION="${{ github.event.inputs.test_version }}"
+      #     else
+      #       VERSION="${{ github.ref_name }}"
+      #     fi
           
-          VERSION_CLEAN=${VERSION#v}
+      #     VERSION_CLEAN=${VERSION#v}
           
-          # Find the actual executable name if not already set
-          if [ -z "$EXECUTABLE_NAME" ]; then
-            EXECUTABLE_NAME=$(find build/linux -maxdepth 1 -type f -executable | head -1 | xargs basename)
-          fi
+      #     # Find the actual executable name if not already set
+      #     if [ -z "$EXECUTABLE_NAME" ]; then
+      #       EXECUTABLE_NAME=$(find build/linux -maxdepth 1 -type f -executable | head -1 | xargs basename)
+      #     fi
           
-          # Create debian package structure
-          mkdir -p deb/DEBIAN
-          mkdir -p deb/usr/bin
-          mkdir -p deb/usr/share/applications
-          mkdir -p deb/usr/share/doc/swisskit
-          mkdir -p deb/usr/share/icons/hicolor/256x256/apps
+      #     # Create debian package structure
+      #     mkdir -p deb/DEBIAN
+      #     mkdir -p deb/usr/bin
+      #     mkdir -p deb/usr/share/applications
+      #     mkdir -p deb/usr/share/doc/swisskit
+      #     mkdir -p deb/usr/share/icons/hicolor/256x256/apps
           
-          # Copy application files
-          cp -r build/linux/* deb/usr/bin/
-          chmod +x "deb/usr/bin/$EXECUTABLE_NAME"
+      #     # Copy application files
+      #     cp -r build/linux/* deb/usr/bin/
+      #     chmod +x "deb/usr/bin/$EXECUTABLE_NAME"
           
-          # Create a symlink if the executable name is different from SwissKit
-          if [ "$EXECUTABLE_NAME" != "SwissKit" ]; then
-            cd deb/usr/bin
-            ln -s "$EXECUTABLE_NAME" SwissKit
-            cd ../..
-          fi
+      #     # Create a symlink if the executable name is different from SwissKit
+      #     if [ "$EXECUTABLE_NAME" != "SwissKit" ]; then
+      #       cd deb/usr/bin
+      #       ln -s "$EXECUTABLE_NAME" SwissKit
+      #       cd ../..
+      #     fi
           
-          # Create control file
-          cat > deb/DEBIAN/control << EOF
-          Package: swisskit
-          Version: $VERSION_CLEAN
-          Section: utils
-          Priority: optional
-          Architecture: amd64
-          Maintainer: Your Name <your.email@example.com>
-          Description: SwissKit Application
-           A multi-tool application built with Flet
-          EOF
+      #     # Create control file
+      #     cat > deb/DEBIAN/control << EOF
+      #     Package: swisskit
+      #     Version: $VERSION_CLEAN
+      #     Section: utils
+      #     Priority: optional
+      #     Architecture: amd64
+      #     Maintainer: Your Name <your.email@example.com>
+      #     Description: SwissKit Application
+      #      A multi-tool application built with Flet
+      #     EOF
           
-          # Create desktop file
-          cat > deb/usr/share/applications/swisskit.desktop << EOF
-          [Desktop Entry]
-          Name=SwissKit
-          Exec=/usr/bin/SwissKit
-          Icon=swisskit
-          Type=Application
-          Categories=Utility;
-          Comment=SwissKit Application
-          EOF
+      #     # Create desktop file
+      #     cat > deb/usr/share/applications/swisskit.desktop << EOF
+      #     [Desktop Entry]
+      #     Name=SwissKit
+      #     Exec=/usr/bin/SwissKit
+      #     Icon=swisskit
+      #     Type=Application
+      #     Categories=Utility;
+      #     Comment=SwissKit Application
+      #     EOF
           
-          # Create or copy icon
-          if [ -f "assets/icon.png" ]; then
-            cp assets/icon.png deb/usr/share/icons/hicolor/256x256/apps/swisskit.png
-          else
-            # Create a simple placeholder icon using ImageMagick
-            convert -size 256x256 xc:white \
-              -fill '#2196F3' -draw "rectangle 32,32 224,224" \
-              -fill white -pointsize 120 -gravity center -annotate +0+0 'S' \
-              deb/usr/share/icons/hicolor/256x256/apps/swisskit.png
-          fi
+      #     # Create or copy icon
+      #     if [ -f "assets/icon.png" ]; then
+      #       cp assets/icon.png deb/usr/share/icons/hicolor/256x256/apps/swisskit.png
+      #     else
+      #       # Create a simple placeholder icon using ImageMagick
+      #       convert -size 256x256 xc:white \
+      #         -fill '#2196F3' -draw "rectangle 32,32 224,224" \
+      #         -fill white -pointsize 120 -gravity center -annotate +0+0 'S' \
+      #         deb/usr/share/icons/hicolor/256x256/apps/swisskit.png
+      #     fi
           
-          # Create copyright file
-          cat > deb/usr/share/doc/swisskit/copyright << EOF
-          Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-          Upstream-Name: SwissKit
-          Source: https://github.com/${{ github.repository }}
+      #     # Create copyright file
+      #     cat > deb/usr/share/doc/swisskit/copyright << EOF
+      #     Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+      #     Upstream-Name: SwissKit
+      #     Source: https://github.com/${{ github.repository }}
           
-          Files: *
-          Copyright: 2024 Your Name
-          License: MIT
-          EOF
+      #     Files: *
+      #     Copyright: 2024 Your Name
+      #     License: MIT
+      #     EOF
           
-          # Build DEB package
-          dpkg-deb --build deb
-          mv deb.deb "release/swisskit_${VERSION_CLEAN}_amd64.deb"
+      #     # Build DEB package
+      #     dpkg-deb --build deb
+      #     mv deb.deb "release/swisskit_${VERSION_CLEAN}_amd64.deb"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -487,7 +487,7 @@ jobs:
           path: |
             release/*.tar.gz
             release/*.AppImage
-            release/*.deb
+            # release/*.deb
 
   release:
     needs: [build-windows, build-linux]
@@ -539,12 +539,7 @@ jobs:
               - Works on most Linux distributions
               - No installation required
               - Just download, make executable, and run
-            
-            #### DEB Package (For Debian/Ubuntu)
-            - **swisskit_[version]_amd64.deb** - Debian package
-              - For Debian, Ubuntu, and derivatives
-              - Installs with system package manager
-              - Integrates with desktop environment
+        
             
             #### Tarball (Manual installation)
             - **swisskit-linux-x64-[version].tar.gz** - Compressed archive
@@ -563,12 +558,6 @@ jobs:
             ```bash
             chmod +x SwissKit-*.AppImage
             ./SwissKit-*.AppImage
-            ```
-            
-            #### Linux DEB Package:
-            ```bash
-            sudo dpkg -i swisskit_*.deb
-            # Or double-click in file manager
             ```
             
             #### Linux Tarball:
