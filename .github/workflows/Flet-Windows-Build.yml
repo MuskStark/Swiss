@@ -94,8 +94,8 @@ jobs:
           Name: "english"; MessagesFile: "compiler:Default.isl"
           
           [Tasks]
-          Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"
-          Name: "startmenu"; Description: "创建开始菜单快捷方式"; GroupDescription: "附加图标:"; Flags: checkedonce
+          Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
+          Name: "startmenu"; Description: "Create a start menu shortcut"; GroupDescription: "Additional shortcuts:"; Flags: checkedonce
           
           [Files]
           Source: "build\windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -106,7 +106,7 @@ jobs:
           Name: "{userstartmenu}\SwissKit"; Filename: "{app}\SwissKit.exe"; Tasks: startmenu
           
           [Run]
-          Filename: "{app}\SwissKit.exe"; Description: "启动 SwissKit"; Flags: nowait postinstall skipifsilent
+          Filename: "{app}\SwissKit.exe"; Description: "Launch SwissKit"; Flags: nowait postinstall skipifsilent
           
           [UninstallDelete]
           Type: filesandordirs; Name: "{app}"
@@ -145,7 +145,6 @@ jobs:
           path: |
             build/*.zip
             installer/*.exe
-            build/windows/SwissKit.exe
 
   release:
     needs: build-windows
@@ -167,34 +166,34 @@ jobs:
           files: |
             artifacts/**/*
           body: |
-            ## Windows 版本下载
+            ## Windows Version Downloads
             
-            ### 🚀 推荐下载（安装包）
-            - **SwissKit-Setup-[版本号].exe** - Windows 安装程序
-              - 自动安装到系统
-              - 创建桌面和开始菜单快捷方式
-              - 支持一键卸载
-              - 适合长期使用
+            ### 🚀 Recommended (Installer)
+            - **SwissKit-Setup-[version].exe** - Windows Installer
+              - Automatically installs to system
+              - Creates desktop and start menu shortcuts
+              - Supports one-click uninstall
+              - Best for regular use
             
-            ### 📦 便携版（ZIP包）
-            - **swisskit-windows-x64-[版本号].zip** - 绿色免安装版
-              - 解压即用
-              - 不修改系统文件
-              - 适合临时使用或测试
+            ### 📦 Portable Version (ZIP)
+            - **swisskit-windows-x64-[version].zip** - Portable version
+              - Extract and run
+              - No system modifications
+              - Best for testing or temporary use
             
-            ### 使用说明
+            ### Installation Instructions
             
-            **安装包版本：**
-            1. 下载 `.exe` 安装文件
-            2. 双击运行安装程序
-            3. 按照向导完成安装
-            4. 从桌面或开始菜单启动程序
+            **Installer Version:**
+            1. Download the `.exe` installer file
+            2. Double-click to run the installer
+            3. Follow the setup wizard
+            4. Launch from desktop or start menu
             
-            **便携版：**
-            1. 下载ZIP文件并解压
-            2. 运行文件夹内的 `SwissKit.exe`
-            3. 如遇安全警告，选择"更多信息"→"仍要运行"
+            **Portable Version:**
+            1. Download and extract the ZIP file
+            2. Run `SwissKit.exe` from the extracted folder
+            3. If you see a security warning, click "More info" → "Run anyway"
             
-            > **系统要求：** Windows 10/11 (x64)
+            > **System Requirements:** Windows 10/11 (x64)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
