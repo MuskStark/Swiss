@@ -1,9 +1,9 @@
-name: Flet Windows Build
+name: Flet Windows Build with Installer
 
 on:
   push:
-    tags: ['v*']  # 标签触发
-  workflow_dispatch:  # 手动触发
+    tags: ['v*']
+  workflow_dispatch:
     inputs:
       test_version:
         description: '测试版本号'
@@ -48,18 +48,85 @@ jobs:
             $VERSION = "${{ github.ref_name }}"
           }
           
-          # 设置Windows环境变量
           $env:PYTHONIOENCODING = "utf-8"
           $env:PYTHONUTF8 = "1"
           
-          # 执行构建命令
           uv run flet build windows --build-version $VERSION
         shell: powershell
 
-      - name: Package Windows build
+      # 新增：安装 Inno Setup
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y
+        shell: powershell
+
+      # 新增：创建 Inno Setup 脚本
+      - name: Create Inno Setup script
         shell: powershell
         run: |
-          # 创建版本目录
+          $version = if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            "${{ github.event.inputs.test_version }}"
+          } else {
+            "${{ github.ref_name }}"
+          }
+          
+          $versionClean = $version -replace '^v', ''
+          
+          $innoScript = @"
+          [Setup]
+          AppName=SwissKit
+          AppVersion=$versionClean
+          AppPublisher=Your Company Name
+          AppPublisherURL=https://github.com/${{ github.repository }}
+          DefaultDirName={autopf}\SwissKit
+          DefaultGroupName=SwissKit
+          UninstallDisplayName=SwissKit
+          Compression=lzma2
+          SolidCompression=yes
+          OutputDir=installer
+          OutputBaseFilename=SwissKit-Setup-$versionClean
+          SetupIconFile=build\windows\SwissKit.exe
+          WizardStyle=modern
+          PrivilegesRequired=lowest
+          ArchitecturesAllowed=x64compatible
+          ArchitecturesInstallIn64BitMode=x64compatible
+          
+          [Languages]
+          Name: "english"; MessagesFile: "compiler:Default.isl"
+          Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+          
+          [Tasks]
+          Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"
+          Name: "startmenu"; Description: "创建开始菜单快捷方式"; GroupDescription: "附加图标:"; Flags: checkedonce
+          
+          [Files]
+          Source: "build\windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+          
+          [Icons]
+          Name: "{group}\SwissKit"; Filename: "{app}\SwissKit.exe"
+          Name: "{autodesktop}\SwissKit"; Filename: "{app}\SwissKit.exe"; Tasks: desktopicon
+          Name: "{userstartmenu}\SwissKit"; Filename: "{app}\SwissKit.exe"; Tasks: startmenu
+          
+          [Run]
+          Filename: "{app}\SwissKit.exe"; Description: "启动 SwissKit"; Flags: nowait postinstall skipifsilent
+          
+          [UninstallDelete]
+          Type: filesandordirs; Name: "{app}"
+          "@
+          
+          New-Item -ItemType Directory -Path "installer" -Force
+          $innoScript | Out-File -FilePath "swisskit.iss" -Encoding UTF8
+
+      # 新增：构建安装包
+      - name: Build installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "swisskit.iss"
+        shell: powershell
+
+      # 修改：同时打包ZIP和安装包
+      - name: Package builds
+        shell: powershell
+        run: |
           $version = if ("${{ github.event_name }}" -eq "workflow_dispatch") {
             "${{ github.event.inputs.test_version }}"
           } else {
@@ -68,13 +135,9 @@ jobs:
           
           $artifactName = "swisskit-windows-x64-$version"
           
-          # 创建发布目录
-          New-Item -ItemType Directory -Path "release\$artifactName" -Force
-          
-          # 复制构建文件
-          Copy-Item -Path "build\windows\*" -Destination "release\$artifactName" -Recurse
-          
           # 创建ZIP包
+          New-Item -ItemType Directory -Path "release\$artifactName" -Force
+          Copy-Item -Path "build\windows\*" -Destination "release\$artifactName" -Recurse
           Compress-Archive -Path "release\$artifactName" -DestinationPath "build\$artifactName.zip"
 
       - name: Upload artifact
@@ -83,7 +146,8 @@ jobs:
           name: windows-build
           path: |
             build/*.zip
-            build/windows/SwissKit.exe  # 保留原始exe文件作为备份
+            installer/*.exe
+            build/windows/SwissKit.exe
 
   release:
     needs: build-windows
@@ -105,18 +169,34 @@ jobs:
           files: |
             artifacts/**/*
           body: |
-            ## Windows 版本下载说明
+            ## Windows 版本下载
             
-            请下载对应版本的ZIP包：
-            - 文件名格式: `swisskit-windows-x64-[版本号].zip`
+            ### 🚀 推荐下载（安装包）
+            - **SwissKit-Setup-[版本号].exe** - Windows 安装程序
+              - 自动安装到系统
+              - 创建桌面和开始菜单快捷方式
+              - 支持一键卸载
+              - 适合长期使用
             
-            ### 使用说明：
+            ### 📦 便携版（ZIP包）
+            - **swisskit-windows-x64-[版本号].zip** - 绿色免安装版
+              - 解压即用
+              - 不修改系统文件
+              - 适合临时使用或测试
+            
+            ### 使用说明
+            
+            **安装包版本：**
+            1. 下载 `.exe` 安装文件
+            2. 双击运行安装程序
+            3. 按照向导完成安装
+            4. 从桌面或开始菜单启动程序
+            
+            **便携版：**
             1. 下载ZIP文件并解压
             2. 运行文件夹内的 `SwissKit.exe`
-            3. 如果遇到安全警告，请选择"更多信息"→"仍要运行"
+            3. 如遇安全警告，选择"更多信息"→"仍要运行"
             
-            > 包含文件：
-            > - SwissKit.exe (主程序)
-            > - 所有必要的依赖库和资源文件
+            > **系统要求：** Windows 10/11 (x64)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
