@@ -74,7 +74,7 @@ jobs:
           [Setup]
           AppName=SwissKit
           AppVersion=$versionClean
-          AppPublisher=Summer Group
+          AppPublisher=Your Company Name
           AppPublisherURL=https://github.com/${{ github.repository }}
           AppSupportURL=https://github.com/${{ github.repository }}/issues
           AppUpdatesURL=https://github.com/${{ github.repository }}/releases
@@ -274,6 +274,10 @@ jobs:
           
           VERSION_CLEAN=${VERSION#v}
           
+          # Install required tools
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+          
           # Download AppImage tools
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
@@ -311,14 +315,33 @@ jobs:
           chmod +x AppDir/AppRun
           chmod +x AppDir/usr/bin/SwissKit
           
-          # Copy icon (assuming you have one, otherwise create a placeholder)
-          # If you don't have an icon, uncomment the following lines to create a placeholder
-          # convert -size 256x256 xc:blue -fill white -draw "circle 128,128 128,64" AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png
-          # Or copy your existing icon:
-          # cp assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png
+          # Create a default icon (required for AppImage)
+          # Check if custom icon exists, otherwise create a placeholder
+          if [ -f "assets/icon.png" ]; then
+            cp assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png
+          else
+            # Create a simple placeholder icon
+            convert -size 256x256 xc:white \
+              -fill '#2196F3' -draw "rectangle 32,32 224,224" \
+              -fill white -pointsize 120 -gravity center -annotate +0+0 'S' \
+              AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png
+          fi
           
-          # Build AppImage
-          ./appimagetool-x86_64.AppImage AppDir "release/SwissKit-$VERSION_CLEAN-x86_64.AppImage"
+          # Copy icon to AppDir root (required by some AppImage versions)
+          cp AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png AppDir/swisskit.png
+          
+          # Create .DirIcon symlink (required for AppImage)
+          ln -s swisskit.png AppDir/.DirIcon
+          
+          # Ensure release directory exists
+          mkdir -p release
+          
+          # Build AppImage with verbose output for debugging
+          ./appimagetool-x86_64.AppImage --verbose AppDir "release/SwissKit-$VERSION_CLEAN-x86_64.AppImage" || {
+            echo "AppImage build failed. Checking AppDir structure:"
+            find AppDir -type f | head -20
+            exit 1
+          }
 
       - name: Create DEB package
         run: |
@@ -335,6 +358,7 @@ jobs:
           mkdir -p deb/usr/bin
           mkdir -p deb/usr/share/applications
           mkdir -p deb/usr/share/doc/swisskit
+          mkdir -p deb/usr/share/icons/hicolor/256x256/apps
           
           # Copy application files
           cp -r build/linux/* deb/usr/bin/
@@ -362,6 +386,17 @@ jobs:
           Categories=Utility;
           Comment=SwissKit Application
           EOF
+          
+          # Create or copy icon
+          if [ -f "assets/icon.png" ]; then
+            cp assets/icon.png deb/usr/share/icons/hicolor/256x256/apps/swisskit.png
+          else
+            # Create a simple placeholder icon using ImageMagick
+            convert -size 256x256 xc:white \
+              -fill '#2196F3' -draw "rectangle 32,32 224,224" \
+              -fill white -pointsize 120 -gravity center -annotate +0+0 'S' \
+              deb/usr/share/icons/hicolor/256x256/apps/swisskit.png
+          fi
           
           # Create copyright file
           cat > deb/usr/share/doc/swisskit/copyright << EOF
