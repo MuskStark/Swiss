@@ -85,7 +85,6 @@ jobs:
           SolidCompression=yes
           OutputDir=installer
           OutputBaseFilename=SwissKit-Setup-$versionClean
-          SetupIconFile=build\windows\SwissKit.exe
           WizardStyle=modern
           PrivilegesRequired=lowest
           ArchitecturesAllowed=x64compatible
