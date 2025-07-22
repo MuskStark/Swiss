@@ -279,6 +279,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libfuse2 desktop-file-utils zsync
           
+          # Check what files were created by flet build
+          echo "Contents of build/linux directory:"
+          ls -la build/linux/
+          
+          # Find the actual executable name
+          EXECUTABLE_NAME=$(find build/linux -maxdepth 1 -type f -executable | head -1 | xargs basename)
+          if [ -z "$EXECUTABLE_NAME" ]; then
+            echo "ERROR: No executable found in build/linux"
+            exit 1
+          fi
+          echo "Found executable: $EXECUTABLE_NAME"
+          echo "EXECUTABLE_NAME=$EXECUTABLE_NAME" >> $GITHUB_ENV
+          
           # Create AppDir structure
           mkdir -p AppDir/usr/bin
           mkdir -p AppDir/usr/share/applications
@@ -286,7 +299,9 @@ jobs:
           
           # Copy application files
           cp -r build/linux/* AppDir/usr/bin/
-          chmod +x AppDir/usr/bin/SwissKit
+          
+          # Make sure the executable has correct permissions
+          chmod +x "AppDir/usr/bin/$EXECUTABLE_NAME"
           
           # Create desktop file
           cat > AppDir/swisskit.desktop << EOF
@@ -295,7 +310,7 @@ jobs:
           Type=Application
           Name=SwissKit
           Comment=SwissKit Application
-          Exec=SwissKit
+          Exec=$EXECUTABLE_NAME
           Icon=swisskit
           Categories=Utility;
           Terminal=false
@@ -326,15 +341,15 @@ jobs:
           cd AppDir && ln -s swisskit.png .DirIcon && cd ..
           
           # Create AppRun
-          cat > AppDir/AppRun << 'APPRUN_EOF'
+          cat > AppDir/AppRun << APPRUN_EOF
           #!/bin/bash
           set -e
           
-          THIS_DIR="$(dirname "$(readlink -f "${0}")")"
-          export PATH="${THIS_DIR}/usr/bin:${PATH}"
-          export LD_LIBRARY_PATH="${THIS_DIR}/usr/lib:${THIS_DIR}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+          THIS_DIR="\$(dirname "\$(readlink -f "\${0}")")"
+          export PATH="\${THIS_DIR}/usr/bin:\${PATH}"
+          export LD_LIBRARY_PATH="\${THIS_DIR}/usr/lib:\${THIS_DIR}/usr/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH}"
           
-          exec "${THIS_DIR}/usr/bin/SwissKit" "$@"
+          exec "\${THIS_DIR}/usr/bin/$EXECUTABLE_NAME" "\$@"
           APPRUN_EOF
           
           chmod +x AppDir/AppRun
@@ -358,7 +373,7 @@ jobs:
             --appdir AppDir \
             --desktop-file AppDir/swisskit.desktop \
             --icon-file AppDir/swisskit.png \
-            --executable AppDir/usr/bin/SwissKit \
+            --executable "AppDir/usr/bin/$EXECUTABLE_NAME" \
             --output appimage || {
               echo "linuxdeploy failed, trying alternative method..."
               
@@ -393,6 +408,11 @@ jobs:
           
           VERSION_CLEAN=${VERSION#v}
           
+          # Find the actual executable name if not already set
+          if [ -z "$EXECUTABLE_NAME" ]; then
+            EXECUTABLE_NAME=$(find build/linux -maxdepth 1 -type f -executable | head -1 | xargs basename)
+          fi
+          
           # Create debian package structure
           mkdir -p deb/DEBIAN
           mkdir -p deb/usr/bin
@@ -402,7 +422,14 @@ jobs:
           
           # Copy application files
           cp -r build/linux/* deb/usr/bin/
-          chmod +x deb/usr/bin/SwissKit
+          chmod +x "deb/usr/bin/$EXECUTABLE_NAME"
+          
+          # Create a symlink if the executable name is different from SwissKit
+          if [ "$EXECUTABLE_NAME" != "SwissKit" ]; then
+            cd deb/usr/bin
+            ln -s "$EXECUTABLE_NAME" SwissKit
+            cd ../..
+          fi
           
           # Create control file
           cat > deb/DEBIAN/control << EOF
