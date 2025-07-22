@@ -276,22 +276,42 @@ jobs:
           
           # Install required tools
           sudo apt-get update
-          sudo apt-get install -y imagemagick
+          sudo apt-get install -y imagemagick file
           
           # Download AppImage tools
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
           
+          # Extract appimagetool to avoid FUSE issues in GitHub Actions
+          ./appimagetool-x86_64.AppImage --appimage-extract
+          
           # Create AppDir structure
           mkdir -p AppDir/usr/bin
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/lib
           
           # Copy application files
+          echo "Copying application files..."
           cp -r build/linux/* AppDir/usr/bin/
           
+          # Check if main executable exists and is valid
+          if [ ! -f "AppDir/usr/bin/SwissKit" ]; then
+            echo "ERROR: SwissKit executable not found in build/linux/"
+            echo "Contents of build/linux:"
+            ls -la build/linux/ || echo "build/linux directory not found"
+            exit 1
+          fi
+          
+          # Make sure the executable has correct permissions
+          chmod +x AppDir/usr/bin/SwissKit
+          
+          # Check file type
+          echo "Checking SwissKit file type:"
+          file AppDir/usr/bin/SwissKit
+          
           # Create desktop file
-          cat > AppDir/usr/share/applications/swisskit.desktop << EOF
+          cat > AppDir/swisskit.desktop << EOF
           [Desktop Entry]
           Name=SwissKit
           Exec=SwissKit
@@ -299,7 +319,11 @@ jobs:
           Type=Application
           Categories=Utility;
           Comment=SwissKit Application
+          Terminal=false
           EOF
+          
+          # Also copy desktop file to standard location
+          cp AppDir/swisskit.desktop AppDir/usr/share/applications/
           
           # Create AppRun script
           cat > AppDir/AppRun << 'EOF'
@@ -308,40 +332,65 @@ jobs:
           HERE=${SELF%/*}
           export PATH="${HERE}/usr/bin/:${PATH}"
           export LD_LIBRARY_PATH="${HERE}/usr/lib/:${HERE}/usr/lib/x86_64-linux-gnu/:${LD_LIBRARY_PATH}"
-          cd "${HERE}/usr/bin"
+          cd "${HERE}/usr"
           exec "${HERE}/usr/bin/SwissKit" "$@"
           EOF
           
           chmod +x AppDir/AppRun
-          chmod +x AppDir/usr/bin/SwissKit
           
           # Create a default icon (required for AppImage)
-          # Check if custom icon exists, otherwise create a placeholder
+          echo "Creating application icon..."
           if [ -f "assets/icon.png" ]; then
+            cp assets/icon.png AppDir/swisskit.png
             cp assets/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png
           else
             # Create a simple placeholder icon
             convert -size 256x256 xc:white \
               -fill '#2196F3' -draw "rectangle 32,32 224,224" \
               -fill white -pointsize 120 -gravity center -annotate +0+0 'S' \
-              AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png
+              AppDir/swisskit.png
+            cp AppDir/swisskit.png AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png
           fi
-          
-          # Copy icon to AppDir root (required by some AppImage versions)
-          cp AppDir/usr/share/icons/hicolor/256x256/apps/swisskit.png AppDir/swisskit.png
           
           # Create .DirIcon symlink (required for AppImage)
           ln -s swisskit.png AppDir/.DirIcon
           
+          # List AppDir contents for debugging
+          echo "AppDir contents:"
+          find AppDir -type f | sort
+          
           # Ensure release directory exists
           mkdir -p release
           
-          # Build AppImage with verbose output for debugging
-          ./appimagetool-x86_64.AppImage --verbose AppDir "release/SwissKit-$VERSION_CLEAN-x86_64.AppImage" || {
-            echo "AppImage build failed. Checking AppDir structure:"
-            find AppDir -type f | head -20
+          # Build AppImage using extracted appimagetool
+          echo "Building AppImage..."
+          ARCH=x86_64 ./squashfs-root/AppRun AppDir "release/SwissKit-$VERSION_CLEAN-x86_64.AppImage" || {
+            echo "AppImage build failed with exit code: $?"
+            echo "Checking for common issues..."
+            
+            # Check if executable is actually executable
+            if [ -x "AppDir/usr/bin/SwissKit" ]; then
+              echo "SwissKit is executable"
+            else
+              echo "ERROR: SwissKit is not executable"
+            fi
+            
+            # Check if AppRun is executable
+            if [ -x "AppDir/AppRun" ]; then
+              echo "AppRun is executable"
+            else
+              echo "ERROR: AppRun is not executable"
+            fi
+            
+            # Try to run the executable directly
+            echo "Trying to run SwissKit directly:"
+            AppDir/usr/bin/SwissKit --version 2>&1 || echo "Direct execution failed"
+            
             exit 1
           }
+          
+          echo "AppImage created successfully!"
+          ls -la release/
 
       - name: Create DEB package
         run: |
